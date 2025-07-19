@@ -1,0 +1,24 @@
+<!-- Save as odel-logo.svg -->
+<svg width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+  <!-- Glowing background -->
+  <circle cx="60" cy="60" r="48" fill="#4f8cff">
+    <animate attributeName="fill" values="#4f8cff;#6fd6ff;#4f8cff" dur="2s" repeatCount="indefinite"/>
+  </circle>
+  <!-- Pulsing ring -->
+  <circle cx="60" cy="60" r="55" fill="none" stroke="#6fd6ff" stroke-width="6" opacity="0.6">
+    <animate attributeName="r" values="55;65;55" dur="1.5s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.6;0.2;0.6" dur="1.5s" repeatCount="indefinite"/>
+  </circle>
+  <!-- Robot face -->
+  <ellipse cx="60" cy="70" rx="28" ry="18" fill="#fff" opacity="0.85"/>
+  <circle cx="48" cy="68" r="5" fill="#4f8cff"/>
+  <circle cx="72" cy="68" r="5" fill="#4f8cff"/>
+  <rect x="54" y="80" width="12" height="4" rx="2" fill="#4f8cff"/>
+  <!-- Antenna -->
+  <rect x="58" y="32" width="4" height="18" rx="2" fill="#6fd6ff"/>
+  <circle cx="60" cy="32" r="4" fill="#fff" stroke="#6fd6ff" stroke-width="2">
+    <animate attributeName="r" values="4;7;4" dur="1.2s" repeatCount="indefinite"/>
+  </circle>
+  <!-- Odel text -->
+  <text x="60" y="110" text-anchor="middle" font-size="18" fill="#fff" font-family="Arial" font-weight="bold" opacity="0.8">Odel</text>
+</svg>
