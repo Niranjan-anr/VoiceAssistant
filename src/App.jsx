@@ -2,18 +2,23 @@
 import React, { useState, useRef, useEffect } from 'react';
 import AssistantUI from './AssistantUI';
 import './App.css';
-import startupSound from './startup.mp3'; // Changed to new startup sound
-import { getJoke, getDefinition, getWeather, getDuckDuckAnswer, getWikipediaAnswer } from './AssistanApi';
-
-const wakeWords = ["hey odel", "okay odel", "hello odel", "listen odel"];
+import startupSound from './startup.mp3';
+import {
+  getJoke,
+  getDefinition,
+  getWeather,
+  getDuckDuckAnswer,
+  getWikipediaAnswer,
+} from './AssistantApi';
 
 const App = () => {
   const [output, setOutput] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [initialized, setInitialized] = useState(false);
+  const [lastContext, setLastContext] = useState(null);
+  const [conversationHistory, setConversationHistory] = useState([]);
   const synthRef = useRef(window.speechSynthesis);
   const recognitionRef = useRef(null);
-  const wakeRecognitionRef = useRef(null);
   const audioRef = useRef(null);
 
   const speak = (text) => {
@@ -21,9 +26,6 @@ const App = () => {
     const utter = new SpeechSynthesisUtterance(text);
     utter.lang = 'en-IN';
     utter.rate = 0.9;
-    utter.onend = () => {
-      startWakeListener();
-    };
     synthRef.current.speak(utter);
   };
 
@@ -34,51 +36,19 @@ const App = () => {
       const intro = new SpeechSynthesisUtterance("Hello! This is Odel. Ready to assist you.");
       intro.lang = 'en-IN';
       intro.rate = 0.85;
-      intro.onend = () => {
-        startWakeListener();
-      };
       synthRef.current.speak(intro);
     }
   };
 
   const controlLight = async (state) => {
-    await fetch("https://iotx0-f34a3-default-rtdb.firebaseio.com/light.json", {
-      method: "PUT",
-      body: JSON.stringify(state),
-    });
-  };
-
-  const interruptAndListen = () => {
-    synthRef.current.cancel();
-    if (wakeRecognitionRef.current) {
-      wakeRecognitionRef.current.stop();
+    try {
+      await fetch("https://iotx0-f34a3-default-rtdb.firebaseio.com/light.json", {
+        method: "PUT",
+        body: JSON.stringify(state),
+      });
+    } catch (err) {
+      speak("Failed to control the light. Check your connection.");
     }
-    startListening();
-  };
-
-  const startWakeListener = () => {
-    if (!('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) return;
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    wakeRecognitionRef.current = new SpeechRecognition();
-    wakeRecognitionRef.current.continuous = true;
-    wakeRecognitionRef.current.interimResults = true;
-    wakeRecognitionRef.current.lang = 'en-IN';
-
-    wakeRecognitionRef.current.onresult = (event) => {
-      const transcript = Array.from(event.results).map(r => r[0].transcript).join('').toLowerCase();
-      if (wakeWords.some(word => transcript.includes(word))) {
-        console.log("Wake word detected");
-        interruptAndListen();
-      }
-    };
-
-    wakeRecognitionRef.current.onerror = () => {
-      console.warn("Wake word listener error. Restarting...");
-      setTimeout(() => wakeRecognitionRef.current?.start(), 1000);
-    };
-
-    wakeRecognitionRef.current.start();
   };
 
   const startListening = () => {
@@ -88,24 +58,25 @@ const App = () => {
     }
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    recognitionRef.current = new SpeechRecognition();
-    recognitionRef.current.lang = 'en-IN';
-    recognitionRef.current.continuous = false;
-    recognitionRef.current.interimResults = false;
+    const recognizer = new SpeechRecognition();
+    recognizer.lang = 'en-IN';
+    recognizer.continuous = false;
+    recognizer.interimResults = false;
 
-    recognitionRef.current.onresult = async (event) => {
+    recognizer.onresult = async (event) => {
       const query = event.results[0][0].transcript.toLowerCase();
       setOutput(`🎙️ You said: "${query}"`);
       await processQuery(query);
       setIsListening(false);
     };
 
-    recognitionRef.current.onerror = () => {
+    recognizer.onerror = () => {
       speak("Sorry, I didn't catch that.");
       setIsListening(false);
     };
 
-    recognitionRef.current.start();
+    recognizer.start();
+    recognitionRef.current = recognizer;
     setIsListening(true);
   };
 
@@ -115,56 +86,105 @@ const App = () => {
       return;
     }
 
-    if (query.includes("turn on the light")) {
-      await controlLight(1);
-      speak("Light turned on.");
-    } else if (query.includes("turn off the light")) {
-      await controlLight(0);
-      speak("Light turned off.");
-    } else if (["how are you", "how are you doing", "how do you do"].some(p => query.includes(p))) {
-      speak("I'm doing great! Thanks for asking. How are you?");
-    } else if (["what is your name", "who are you"].some(p => query.includes(p))) {
-      speak("I am Odel, your voice assistant buddy.");
-    } else if (["who made you", "who created you"].some(p => query.includes(p))) {
-      speak("I was created by Niranjan. That's all I know.");
-    } else if (["thank you", "thanks"].some(p => query.includes(p))) {
-      speak("You're welcome!");
-    } else if (["hello", "hi", "hey"].some(p => query === p || query.includes("hello"))) {
-      speak("Hello there! How can I help?");
-    } else if (query.includes("what's up")) {
-      speak("Just processing thoughts at lightning speed!");
-    } else if (query.includes("do you love me")) {
-      speak("Of course! You're my favorite human.");
-    } else if (query.includes("tell me about yourself")) {
-      speak("I'm Odel, a voice assistant built to answer, help, and have fun conversations with you.");
-    } else if (query.includes("joke")) {
-      const joke = await getJoke();
-      speak(joke);
-    } else if (query.includes("weather")) {
-      const weather = await getWeather();
-      speak(weather);
-    } else if (query.includes("define")) {
-      const word = query.replace("define", "").trim();
-      const meaning = await getDefinition(word);
-      speak(`Definition of ${word}: ${meaning}`);
-    } else {
-      let answer = await getDuckDuckAnswer(query);
-      if (!answer || answer.length < 5) {
-        answer = await getWikipediaAnswer(query);
-      }
-      speak(answer);
+    const lowerQuery = query.toLowerCase();
+    const newEntry = { userQuery: lowerQuery, assistantResponse: '', intent: '' };
+
+    const say = (text, intent = '') => {
+      speak(text);
+      newEntry.assistantResponse = text;
+      newEntry.intent = intent;
+    };
+
+    // Follow-up: small talk context
+    if (lastContext === 'how-are-you' && /(i('|’)m|i am|doing|feeling)/.test(lowerQuery)) {
+      setLastContext(null);
+      return say("Glad to hear that!", 'response');
     }
+
+    // Small Talk and Greetings
+    if (/\b(hi|hello|hey|yo|buddy|sup|whats up)\b/.test(lowerQuery)) {
+      return say("Hey there! How can I help?", 'greeting');
+    }
+
+    if (/how (are|r) (you|u)/.test(lowerQuery)) {
+      setLastContext('how-are-you');
+      return say("I'm doing great! What about you?", 'how-are-you');
+    }
+
+    if (/what('?s| is) your name|who are you/.test(lowerQuery)) {
+      return say("I am Odel, your voice assistant buddy.", 'identity');
+    }
+
+    if (/who (made|created) you/.test(lowerQuery)) {
+      return say("I was created by Niranjan. That's all I know.", 'creator');
+    }
+
+    if (/thank(s| you)/.test(lowerQuery)) {
+      return say("You're welcome!", 'thanks');
+    }
+
+    if (/tell me about yourself/.test(lowerQuery)) {
+      return say("I'm Odel, a voice assistant built to answer, help, and chat with you.", 'about');
+    }
+
+    if (/do you love me/.test(lowerQuery)) {
+      return say("Of course! You're my favorite human.", 'love');
+    }
+
+    if (/turn on.*light/.test(lowerQuery)) {
+      await controlLight(1);
+      return say("Light turned on.", 'light-on');
+    }
+
+    if (/turn off.*light/.test(lowerQuery)) {
+      await controlLight(0);
+      return say("Light turned off.", 'light-off');
+    }
+
+    if (/joke/.test(lowerQuery)) {
+      const joke = await getJoke();
+      return say(joke, 'joke');
+    }
+
+    if (/weather/.test(lowerQuery)) {
+      const weather = await getWeather();
+      return say(weather, 'weather');
+    }
+
+    if (/define/.test(lowerQuery)) {
+      const word = lowerQuery.replace("define", "").trim();
+      const meaning = await getDefinition(word);
+      return say(`Definition of ${word}: ${meaning}`, 'definition');
+    }
+
+    // General fallback using APIs
+    let answer = await getDuckDuckAnswer(lowerQuery);
+    if (!answer || answer.length < 5) {
+      answer = await getWikipediaAnswer(lowerQuery);
+    }
+
+    if (!answer || answer.length < 5) {
+      say("I couldn't find a good answer for that. Try rephrasing?", 'no-answer');
+    } else {
+      say(answer, 'info');
+    }
+
+    // Push to memory
+    setConversationHistory(prev => [...prev.slice(-4), newEntry]);
   };
 
   useEffect(() => {
-    window.addEventListener('online', () => speak("You're back online."));
-    window.addEventListener('offline', () => speak("You are offline. Some features may not work."));
+    const handleOnline = () => speak("You're back online.");
+    const handleOffline = () => speak("You are offline. Some features may not work.");
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
     return () => {
-      window.removeEventListener('online', () => {});
-      window.removeEventListener('offline', () => {});
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
       synthRef.current.cancel();
       recognitionRef.current?.abort();
-      wakeRecognitionRef.current?.abort();
     };
   }, []);
 
@@ -178,7 +198,7 @@ const App = () => {
       <AssistantUI
         isListening={isListening}
         output={output}
-        onTalk={interruptAndListen}
+        onTalk={startListening}
       />
       <audio ref={audioRef} src={startupSound} preload="auto" />
     </div>
